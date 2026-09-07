@@ -1,0 +1,76 @@
+# dependencies
+/node_modules/
+/.pnp/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Next.js build output
+/.next/
+/out/
+/build/
+
+# test and coverage output
+/coverage/
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# local environment files
+.env*
+*.env
+
+# Docker and local deployment configuration
+/docker/
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# deployment and local tooling
+/.vercel/
+/.turbo/
+/.vscode/
+/.idea/
+
+# TypeScript and tool caches
+*.tsbuildinfo
+next-env.d.ts
+.eslintcache
+
+# logs and debug output
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# credentials and private keys
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.kdbx
+token.txt
+*credential*
+*secret*
+*service_account*
+id_rsa*
+
+# local databases and state
+*.sqlite3
+*.sqlite
+*.db
+*.db-*
+*.tfstate
+*.tfstate.*
