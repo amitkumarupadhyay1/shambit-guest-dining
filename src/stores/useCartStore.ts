@@ -14,7 +14,13 @@ export interface CartEntry {
 
 interface CartState {
   items: CartEntry[];
-  addItem: (item: MenuItem, qty?: number, variant?: MenuItemVariant, modifiers?: MenuItemModifier[], instructions?: string) => void;
+  addItem: (
+    item: MenuItem,
+    qty?: number,
+    variant?: MenuItemVariant,
+    modifiers?: MenuItemModifier[],
+    instructions?: string,
+  ) => void;
   removeItem: (menuItemId: number) => void;
   updateQuantity: (menuItemId: number, quantity: number) => void;
   getItemQuantity: (menuItemId: number) => number;
@@ -28,14 +34,22 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
       items: [],
       addItem: (item, qty = 1, variant, modifiers, instructions) => {
-        const price = variant ? parseFloat(variant.price) : parseFloat(item.price);
-        const modifierTotal = modifiers?.reduce((sum, m) => sum + parseFloat(m.price_adjustment), 0) || 0;
+        const price = variant
+          ? parseFloat(variant.price)
+          : parseFloat(item.price);
+        const modifierTotal =
+          modifiers?.reduce(
+            (sum, m) => sum + parseFloat(m.price_adjustment),
+            0,
+          ) || 0;
         set((state) => {
           const existing = state.items.find((i) => i.menuItemId === item.id);
           if (existing) {
             return {
               items: state.items.map((i) =>
-                i.menuItemId === item.id ? { ...i, quantity: i.quantity + qty } : i
+                i.menuItemId === item.id
+                  ? { ...i, quantity: i.quantity + qty }
+                  : i,
               ),
             };
           }
@@ -56,20 +70,27 @@ export const useCartStore = create<CartState>()(
         });
       },
       removeItem: (menuItemId) =>
-        set((state) => ({ items: state.items.filter((i) => i.menuItemId !== menuItemId) })),
+        set((state) => ({
+          items: state.items.filter((i) => i.menuItemId !== menuItemId),
+        })),
       updateQuantity: (menuItemId, quantity) =>
         set((state) => ({
-          items: quantity <= 0
-            ? state.items.filter((i) => i.menuItemId !== menuItemId)
-            : state.items.map((i) =>
-                i.menuItemId === menuItemId ? { ...i, quantity: Math.min(quantity, 20) } : i
-              ),
+          items:
+            quantity <= 0
+              ? state.items.filter((i) => i.menuItemId !== menuItemId)
+              : state.items.map((i) =>
+                  i.menuItemId === menuItemId
+                    ? { ...i, quantity: Math.min(quantity, 20) }
+                    : i,
+                ),
         })),
-      getItemQuantity: (menuItemId) => get().items.find((i) => i.menuItemId === menuItemId)?.quantity || 0,
+      getItemQuantity: (menuItemId) =>
+        get().items.find((i) => i.menuItemId === menuItemId)?.quantity || 0,
       getTotalItems: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
-      getTotalPrice: () => get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+      getTotalPrice: () =>
+        get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
       clearCart: () => set({ items: [] }),
     }),
-    { name: "shambit-guest-cart" }
-  )
+    { name: "shambit-guest-cart" },
+  ),
 );

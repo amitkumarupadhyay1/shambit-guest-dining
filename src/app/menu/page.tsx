@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  useCallback,
+  useSyncExternalStore,
+} from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSessionStore } from "@/stores/useSessionStore";
@@ -21,18 +28,66 @@ import {
   Star,
   Clock,
   AlertTriangle,
+  ChevronDown,
+  Sparkles,
+  ScanLine,
+  UtensilsCrossed,
 } from "lucide-react";
 import type { MenuItem, MenuItemVariant, MenuItemModifier } from "@/types";
 
 // ─── Filter Chips ─────────────────────────────────────────────
 type FilterKey = "VEG" | "NON_VEG" | "VEGAN" | "BESTSELLER" | "CHEFS_SPECIAL";
+type SortKey = "FEATURED" | "PRICE_LOW" | "PRICE_HIGH" | "FASTEST";
 
-const FILTER_CHIPS: { key: FilterKey; label: string; icon?: string; color: string }[] = [
-  { key: "VEG", label: "Veg", icon: "🟢", color: "bg-green-100 text-green-800 border-green-300" },
-  { key: "NON_VEG", label: "Non-Veg", icon: "🔴", color: "bg-red-100 text-red-800 border-red-300" },
-  { key: "VEGAN", label: "Vegan", icon: "🌱", color: "bg-emerald-100 text-emerald-800 border-emerald-300" },
-  { key: "BESTSELLER", label: "Bestsellers", icon: "⭐", color: "bg-amber-100 text-amber-800 border-amber-300" },
-  { key: "CHEFS_SPECIAL", label: "Chef's Special", icon: "👨‍🍳", color: "bg-purple-100 text-purple-800 border-purple-300" },
+const FILTER_CHIPS: {
+  key: FilterKey | "COMBO";
+  label: string;
+  icon?: string;
+  color: string;
+}[] = [
+  {
+    key: "VEG",
+    label: "Veg",
+    icon: "🟢",
+    color: "bg-green-100 text-green-800 border-green-300",
+  },
+  {
+    key: "NON_VEG",
+    label: "Non-Veg",
+    icon: "🔴",
+    color: "bg-red-100 text-red-800 border-red-300",
+  },
+  {
+    key: "VEGAN",
+    label: "Vegan",
+    icon: "🌱",
+    color: "bg-emerald-100 text-emerald-800 border-emerald-300",
+  },
+  {
+    key: "BESTSELLER",
+    label: "Bestsellers",
+    icon: "⭐",
+    color: "bg-amber-100 text-amber-800 border-amber-300",
+  },
+  {
+    key: "CHEFS_SPECIAL",
+    label: "Chef's Special",
+    icon: "👨‍🍳",
+    color: "bg-purple-100 text-purple-800 border-purple-300",
+  },
+  {
+    key: "COMBO",
+    label: "Combo Meals",
+    icon: "🍱",
+    color: "bg-orange-100 text-orange-800 border-orange-300",
+  },
+];
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "FEATURED", label: "Featured" },
+  { key: "FASTEST", label: "Fastest" },
+  { key: "PRICE_LOW", label: "Price: Low to High" },
+  { key: "PRICE_HIGH", label: "Price: High to Low" },
 ];
 
 // ─── Item Detail Bottom Sheet ─────────────────────────────────
@@ -43,16 +98,26 @@ function ItemDetailSheet({
 }: {
   item: MenuItem;
   onClose: () => void;
-  onAddToCart: (item: MenuItem, qty: number, variant?: MenuItemVariant, modifiers?: MenuItemModifier[], instructions?: string) => void;
+  onAddToCart: (
+    item: MenuItem,
+    qty: number,
+    variant?: MenuItemVariant,
+    modifiers?: MenuItemModifier[],
+    instructions?: string,
+  ) => void;
 }) {
   const [qty, setQty] = useState(1);
-  const [selectedVariant, setSelectedVariant] = useState<MenuItemVariant | undefined>(
-    item.variants.length > 0 ? item.variants[0] : undefined
+  const [selectedVariant, setSelectedVariant] = useState<
+    MenuItemVariant | undefined
+  >(item.variants.length > 0 ? item.variants[0] : undefined);
+  const [selectedModifiers, setSelectedModifiers] = useState<Set<number>>(
+    new Set(),
   );
-  const [selectedModifiers, setSelectedModifiers] = useState<Set<number>>(new Set());
   const [instructions, setInstructions] = useState("");
 
-  const basePrice = selectedVariant ? parseFloat(selectedVariant.price) : parseFloat(item.price);
+  const basePrice = selectedVariant
+    ? parseFloat(selectedVariant.price)
+    : parseFloat(item.price);
   const modifierTotal = item.modifiers
     .filter((m) => selectedModifiers.has(m.id))
     .reduce((sum, m) => sum + parseFloat(m.price_adjustment), 0);
@@ -60,7 +125,13 @@ function ItemDetailSheet({
 
   const handleAdd = () => {
     const mods = item.modifiers.filter((m) => selectedModifiers.has(m.id));
-    onAddToCart(item, qty, selectedVariant, mods.length > 0 ? mods : undefined, instructions || undefined);
+    onAddToCart(
+      item,
+      qty,
+      selectedVariant,
+      mods.length > 0 ? mods : undefined,
+      instructions || undefined,
+    );
     onClose();
   };
 
@@ -83,7 +154,11 @@ function ItemDetailSheet({
         {/* Hero Image */}
         {item.image && (
           <div className="w-full h-48 bg-slate-100">
-            <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+            <img
+              src={item.image}
+              alt={item.name}
+              className="w-full h-full object-cover"
+            />
           </div>
         )}
 
@@ -105,15 +180,22 @@ function ItemDetailSheet({
                 )}
               </div>
               <h2 className="text-xl font-bold text-slate-900">{item.name}</h2>
-              <p className="text-emerald-600 font-semibold mt-1">{formatCurrency(item.price)}</p>
+              <p className="text-emerald-600 font-semibold mt-1">
+                {formatCurrency(item.price)}
+              </p>
             </div>
-            <button onClick={onClose} className="p-2 -mr-2 text-slate-400 hover:text-slate-600">
+            <button
+              onClick={onClose}
+              className="p-2 -mr-2 text-slate-400 hover:text-slate-600"
+            >
               <X className="w-6 h-6" />
             </button>
           </div>
 
           {/* Description */}
-          {item.description && <p className="text-slate-500 text-sm mb-4">{item.description}</p>}
+          {item.description && (
+            <p className="text-slate-500 text-sm mb-4">{item.description}</p>
+          )}
 
           {/* Meta info */}
           <div className="flex gap-4 mb-6 text-xs text-slate-500">
@@ -124,7 +206,8 @@ function ItemDetailSheet({
             )}
             {item.allergens.length > 0 && (
               <span className="flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" /> {item.allergens.join(", ")}
+                <AlertTriangle className="w-3.5 h-3.5" />{" "}
+                {item.allergens.join(", ")}
               </span>
             )}
           </div>
@@ -132,7 +215,9 @@ function ItemDetailSheet({
           {/* Variants */}
           {item.variants.length > 0 && (
             <div className="mb-6">
-              <h3 className="text-sm font-bold text-slate-800 mb-3">Choose Size</h3>
+              <h3 className="text-sm font-bold text-slate-800 mb-3">
+                Choose Size
+              </h3>
               <div className="space-y-2">
                 {item.variants.map((v) => (
                   <button
@@ -145,7 +230,9 @@ function ItemDetailSheet({
                     }`}
                   >
                     <span className="font-medium text-slate-800">{v.name}</span>
-                    <span className="font-semibold text-slate-700">{formatCurrency(v.price)}</span>
+                    <span className="font-semibold text-slate-700">
+                      {formatCurrency(v.price)}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -155,7 +242,9 @@ function ItemDetailSheet({
           {/* Modifiers */}
           {item.modifiers.length > 0 && (
             <div className="mb-6">
-              <h3 className="text-sm font-bold text-slate-800 mb-3">Customise</h3>
+              <h3 className="text-sm font-bold text-slate-800 mb-3">
+                Customise
+              </h3>
               <div className="space-y-2">
                 {item.modifiers.map((m) => {
                   const isSelected = selectedModifiers.has(m.id);
@@ -169,18 +258,26 @@ function ItemDetailSheet({
                         setSelectedModifiers(next);
                       }}
                       className={`w-full flex items-center justify-between p-3 rounded-xl border-2 transition-all ${
-                        isSelected ? "border-emerald-500 bg-emerald-50" : "border-slate-200 hover:border-slate-300"
+                        isSelected
+                          ? "border-emerald-500 bg-emerald-50"
+                          : "border-slate-200 hover:border-slate-300"
                       }`}
                     >
                       <div className="flex items-center gap-3">
                         <div
                           className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-                            isSelected ? "bg-emerald-500 border-emerald-500" : "border-slate-300"
+                            isSelected
+                              ? "bg-emerald-500 border-emerald-500"
+                              : "border-slate-300"
                           }`}
                         >
-                          {isSelected && <span className="text-white text-xs">✓</span>}
+                          {isSelected && (
+                            <span className="text-white text-xs">✓</span>
+                          )}
                         </div>
-                        <span className="font-medium text-slate-800">{m.name}</span>
+                        <span className="font-medium text-slate-800">
+                          {m.name}
+                        </span>
                       </div>
                       <span className="text-slate-500 text-sm">
                         +{formatCurrency(m.price_adjustment)}
@@ -194,7 +291,9 @@ function ItemDetailSheet({
 
           {/* Special Instructions */}
           <div className="mb-6">
-            <h3 className="text-sm font-bold text-slate-800 mb-2">Special Instructions</h3>
+            <h3 className="text-sm font-bold text-slate-800 mb-2">
+              Special Instructions
+            </h3>
             <textarea
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
@@ -245,14 +344,22 @@ function QuantityStepper({ itemId }: { itemId: number }) {
       className="flex items-center gap-2 bg-emerald-50 border-2 border-emerald-200 rounded-full p-0.5"
     >
       <button
-        onClick={(e) => { e.stopPropagation(); updateQuantity(itemId, qty - 1); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          updateQuantity(itemId, qty - 1);
+        }}
         className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-700"
       >
         <Minus className="w-3.5 h-3.5" />
       </button>
-      <span className="font-bold text-sm w-5 text-center text-emerald-800">{qty}</span>
+      <span className="font-bold text-sm w-5 text-center text-emerald-800">
+        {qty}
+      </span>
       <button
-        onClick={(e) => { e.stopPropagation(); updateQuantity(itemId, qty + 1); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          updateQuantity(itemId, qty + 1);
+        }}
         className="w-8 h-8 rounded-full bg-emerald-500 shadow-sm flex items-center justify-center text-white"
       >
         <Plus className="w-3.5 h-3.5" />
@@ -261,17 +368,29 @@ function QuantityStepper({ itemId }: { itemId: number }) {
   );
 }
 
+const emptySubscribe = () => () => {};
+
 // ─── Main Menu Page ───────────────────────────────────────────
 export default function MenuPage() {
   const router = useRouter();
-  const { restaurant, table, menuItems, categories, guestToken } = useSessionStore();
-  const { addItem, getTotalItems, getTotalPrice, getItemQuantity } = useCartStore();
+  const { restaurant, table, menuItems, categories, guestToken } =
+    useSessionStore();
+  const { addItem, getTotalItems, getTotalPrice, getItemQuantity } =
+    useCartStore();
 
   const [search, setSearch] = useState("");
-  const [activeFilters, setActiveFilters] = useState<Set<FilterKey>>(new Set());
+  const [activeFilters, setActiveFilters] = useState<Set<FilterKey | "COMBO">>(
+    new Set(),
+  );
+  const [sortBy, setSortBy] = useState<SortKey>("FEATURED");
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [callingCaptain, setCallingCaptain] = useState(false);
+  const isMounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 
   // Refs for scroll-spy
   const categoryRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -280,10 +399,11 @@ export default function MenuPage() {
   // Sort categories by display_order
   const sortedCategories = useMemo(
     () => [...categories].sort((a, b) => a.display_order - b.display_order),
-    [categories]
+    [categories],
   );
 
-  const selectedCategoryId = activeCategoryId ?? sortedCategories[0]?.id ?? null;
+  const selectedCategoryId =
+    activeCategoryId ?? sortedCategories[0]?.id ?? null;
 
   // Scroll-spy: IntersectionObserver to highlight active category on scroll
   useEffect(() => {
@@ -297,7 +417,7 @@ export default function MenuPage() {
             }
           });
         },
-        { rootMargin: "-160px 0px -60% 0px", threshold: 0 }
+        { rootMargin: "-160px 0px -60% 0px", threshold: 0 },
       );
       observer.observe(el);
       observers.push(observer);
@@ -316,19 +436,39 @@ export default function MenuPage() {
         (item) =>
           item.name.toLowerCase().includes(q) ||
           item.description.toLowerCase().includes(q) ||
-          item.category_name?.toLowerCase().includes(q)
+          item.category_name?.toLowerCase().includes(q),
       );
     }
 
     // Dietary filters
-    if (activeFilters.has("VEG")) items = items.filter((i) => i.dietary_type === "VEG");
-    if (activeFilters.has("NON_VEG")) items = items.filter((i) => i.dietary_type === "NON_VEG");
-    if (activeFilters.has("VEGAN")) items = items.filter((i) => i.dietary_type === "VEGAN");
-    if (activeFilters.has("BESTSELLER")) items = items.filter((i) => i.is_bestseller);
-    if (activeFilters.has("CHEFS_SPECIAL")) items = items.filter((i) => i.is_chefs_special);
+    if (activeFilters.has("VEG"))
+      items = items.filter((i) => i.dietary_type === "VEG");
+    if (activeFilters.has("NON_VEG"))
+      items = items.filter((i) => i.dietary_type === "NON_VEG");
+    if (activeFilters.has("VEGAN"))
+      items = items.filter((i) => i.dietary_type === "VEGAN");
+    if (activeFilters.has("BESTSELLER"))
+      items = items.filter((i) => i.is_bestseller);
+    if (activeFilters.has("CHEFS_SPECIAL"))
+      items = items.filter((i) => i.is_chefs_special);
+    if (activeFilters.has("COMBO" as FilterKey))
+      items = items.filter(
+        (i) =>
+          i.name.toLowerCase().includes("combo") ||
+          i.category_name?.toLowerCase().includes("combo"),
+      );
 
-    return items;
-  }, [menuItems, search, activeFilters]);
+    return [...items].sort((a, b) => {
+      if (sortBy === "PRICE_LOW") return Number(a.price) - Number(b.price);
+      if (sortBy === "PRICE_HIGH") return Number(b.price) - Number(a.price);
+      if (sortBy === "FASTEST")
+        return (a.prep_time_minutes ?? 999) - (b.prep_time_minutes ?? 999);
+      return (
+        Number(b.is_bestseller) - Number(a.is_bestseller) ||
+        Number(b.is_chefs_special) - Number(a.is_chefs_special)
+      );
+    });
+  }, [menuItems, search, activeFilters, sortBy]);
 
   // Group filtered items by category
   const groupedItems = useMemo(() => {
@@ -343,7 +483,7 @@ export default function MenuPage() {
     return groups;
   }, [filteredItems, sortedCategories]);
 
-  const toggleFilter = (key: FilterKey) => {
+  const toggleFilter = (key: FilterKey | "COMBO") => {
     setActiveFilters((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
@@ -380,13 +520,13 @@ export default function MenuPage() {
         addItem(item);
       }
     },
-    [addItem]
+    [addItem],
   );
 
   const totalItems = getTotalItems();
   const totalPrice = getTotalPrice();
 
-  if (!restaurant || !menuItems.length) {
+  if (!isMounted) {
     return (
       <div className="min-h-screen bg-slate-50 p-4 pt-20 space-y-4">
         {[...Array(6)].map((_, i) => (
@@ -396,16 +536,68 @@ export default function MenuPage() {
     );
   }
 
+  if (!restaurant || !table || !guestToken) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-6 flex items-center justify-center text-center">
+        <div className="max-w-sm rounded-3xl bg-white border border-slate-100 shadow-sm p-8">
+          <ScanLine className="w-12 h-12 text-emerald-600 mx-auto mb-4" />
+          <h1 className="text-xl font-bold text-slate-900 mb-2">
+            Scan your table QR to begin
+          </h1>
+          <p className="text-sm text-slate-500">
+            Your table details are needed before we can show the menu.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (menuItems.length === 0) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-6 flex items-center justify-center text-center">
+        <div className="max-w-sm rounded-3xl bg-white border border-slate-100 shadow-sm p-8">
+          <UtensilsCrossed className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+          <h1 className="text-xl font-bold text-slate-900 mb-2">
+            Menu is being prepared
+          </h1>
+          <p className="text-sm leading-6 text-slate-500">
+            There are no items available to order right now. Please ask a team
+            member for assistance.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <PageTransition>
-      <div className="min-h-screen bg-slate-50 pb-28">
+      <div className="min-h-screen bg-slate-50 pb-[calc(8rem+env(safe-area-inset-bottom))]">
         {/* ── Sticky Header ── */}
-        <div className="sticky top-0 bg-white/90 backdrop-blur-xl z-40 shadow-sm">
+        <div className="sticky top-0 bg-white/95 backdrop-blur-xl z-40 border-b border-slate-100">
           {/* Row 1: Restaurant info + Call Captain */}
-          <div className="flex justify-between items-center px-4 pt-3 pb-2">
-            <div>
-              <h1 className="font-bold text-slate-900 leading-tight">{restaurant.name}</h1>
-              <p className="text-xs font-medium text-slate-500">Table {table?.number}</p>
+          <div className="flex justify-between items-center px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 gap-3">
+            <div className="flex items-center gap-3">
+              {restaurant.logo ? (
+                <img
+                  src={restaurant.logo}
+                  alt="Logo"
+                  className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                />
+              ) : (
+                <img
+                  src="/logo.png"
+                  alt="Logo"
+                  className="w-10 h-10 object-contain"
+                />
+              )}
+              <div className="min-w-0">
+                <h1 className="font-bold text-slate-900 leading-tight truncate">
+                  {restaurant.name}
+                </h1>
+                <p className="text-xs font-medium text-slate-500">
+                  Table {table?.number} · Order at your pace
+                </p>
+              </div>
             </div>
             <motion.button
               whileTap={{ scale: 0.9 }}
@@ -418,12 +610,12 @@ export default function MenuPage() {
               }`}
             >
               <Bell className="w-4 h-4" />
-              {callingCaptain ? "Captain Called!" : "Call Captain"}
+              {callingCaptain ? "Request sent" : "Need help?"}
             </motion.button>
           </div>
 
           {/* Row 2: Search */}
-          <div className="px-4 pb-2">
+          <div className="px-4 pb-3">
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
@@ -431,7 +623,7 @@ export default function MenuPage() {
                 placeholder="Search for biryani, paneer, drinks..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-11 pr-10 py-2.5 bg-slate-100 rounded-xl outline-none text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 focus:bg-white transition-all"
+                className="w-full pl-11 pr-10 py-3 bg-slate-100 rounded-2xl outline-none text-base placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/30 focus:bg-white transition-all"
               />
               {search && (
                 <button
@@ -445,7 +637,7 @@ export default function MenuPage() {
           </div>
 
           {/* Row 3: Filter Chips */}
-          <div className="px-4 pb-2 flex gap-2 overflow-x-auto hide-scrollbar">
+          <div className="px-4 pb-3 flex gap-2 overflow-x-auto hide-scrollbar">
             {FILTER_CHIPS.map((chip) => {
               const active = activeFilters.has(chip.key);
               return (
@@ -454,7 +646,9 @@ export default function MenuPage() {
                   whileTap={{ scale: 0.95 }}
                   onClick={() => toggleFilter(chip.key)}
                   className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                    active ? chip.color + " border-current" : "bg-white border-slate-200 text-slate-600"
+                    active
+                      ? chip.color + " border-current"
+                      : "bg-white border-slate-200 text-slate-600"
                   }`}
                 >
                   {chip.icon && <span>{chip.icon}</span>}
@@ -462,6 +656,28 @@ export default function MenuPage() {
                 </motion.button>
               );
             })}
+          </div>
+
+          <div className="px-4 pb-3 flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-slate-500 whitespace-nowrap">
+              {filteredItems.length}{" "}
+              {filteredItems.length === 1 ? "dish" : "dishes"}
+            </p>
+            <label className="relative flex items-center">
+              <span className="sr-only">Sort dishes</span>
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value as SortKey)}
+                className="appearance-none bg-slate-100 text-slate-700 text-xs font-bold pl-3 pr-8 py-2 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/30"
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 w-3.5 h-3.5 text-slate-500" />
+            </label>
           </div>
 
           {/* Row 4: Category Tabs */}
@@ -491,7 +707,7 @@ export default function MenuPage() {
         </div>
 
         {/* ── Menu Items grouped by Category ── */}
-        <div className="px-4 pt-4 space-y-8">
+        <div className="px-4 pt-5 space-y-8 max-w-2xl mx-auto">
           {sortedCategories
             .filter((c) => groupedItems.has(c.id))
             .map((category) => (
@@ -520,9 +736,13 @@ export default function MenuPage() {
                         layout
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="flex gap-3 p-4 bg-white rounded-2xl shadow-sm border border-slate-100 active:scale-[0.99] transition-transform"
+                        className="flex gap-3 p-3.5 min-h-32 bg-white rounded-3xl shadow-sm border border-slate-100 active:scale-[0.99] transition-all hover:shadow-md"
                         onClick={() => {
-                          if (item.variants.length > 0 || item.modifiers.length > 0 || item.description) {
+                          if (
+                            item.variants.length > 0 ||
+                            item.modifiers.length > 0 ||
+                            item.description
+                          ) {
                             setSelectedItem(item);
                           }
                         }}
@@ -531,6 +751,11 @@ export default function MenuPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                             <DietaryBadge type={item.dietary_type} />
+                            {item.spice_level > 0 && (
+                              <span className="text-[10px] text-red-500 font-bold">
+                                {"🌶️".repeat(item.spice_level)}
+                              </span>
+                            )}
                             {item.is_bestseller && (
                               <span className="inline-flex items-center gap-0.5 text-[10px] uppercase font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
                                 <Star className="w-2.5 h-2.5" /> Bestseller
@@ -542,22 +767,34 @@ export default function MenuPage() {
                               </span>
                             )}
                           </div>
-                          <h3 className="font-semibold text-slate-900 leading-tight mb-0.5">{item.name}</h3>
-                          <p className="font-medium text-emerald-700 text-sm mb-1">{formatCurrency(item.price)}</p>
+                          <h3 className="font-bold text-slate-900 leading-tight mb-1">
+                            {item.name}
+                          </h3>
+                          <p className="font-bold text-emerald-700 text-sm mb-1.5">
+                            {formatCurrency(item.price)}
+                          </p>
+                          {item.allergens && item.allergens.length > 0 && (
+                            <p className="text-[10px] text-amber-600 mb-1 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" /> Contains:{" "}
+                              {item.allergens.join(", ")}
+                            </p>
+                          )}
                           {item.description && (
                             <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
                               {item.description}
                             </p>
                           )}
                           {item.variants.length > 0 && (
-                            <p className="text-xs text-emerald-600 font-medium mt-1">Customisable</p>
+                            <p className="text-xs text-emerald-600 font-medium mt-1">
+                              Customisable
+                            </p>
                           )}
                         </div>
 
                         {/* Right: Image + Add/Stepper */}
                         <div className="flex flex-col items-center gap-2 flex-shrink-0">
                           {item.image ? (
-                            <div className="w-[100px] h-[100px] rounded-xl overflow-hidden bg-slate-100 shadow-sm">
+                            <div className="w-[92px] h-[92px] rounded-2xl overflow-hidden bg-slate-100 shadow-sm">
                               <img
                                 src={item.image}
                                 alt={item.name}
@@ -566,20 +803,23 @@ export default function MenuPage() {
                               />
                             </div>
                           ) : (
-                            <div className="w-[100px] h-[80px] rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                            <div className="w-[92px] h-[80px] rounded-2xl bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center">
                               <span className="text-3xl opacity-30">🍽️</span>
                             </div>
                           )}
 
                           {/* Add / Qty Stepper */}
-                          <div className="-mt-4 relative z-10" onClick={(e) => e.stopPropagation()}>
+                          <div
+                            className="-mt-4 relative z-10"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             {itemQty > 0 ? (
                               <QuantityStepper itemId={item.id} />
                             ) : (
                               <motion.button
                                 whileTap={{ scale: 0.9 }}
                                 onClick={() => handleAddItem(item)}
-                                className="px-6 py-1.5 bg-white border-2 border-emerald-500 text-emerald-600 font-bold text-sm rounded-lg shadow-md hover:bg-emerald-50 transition-colors"
+                                className="min-h-10 px-5 py-1.5 bg-white border-2 border-emerald-500 text-emerald-600 font-bold text-sm rounded-xl shadow-md hover:bg-emerald-50 transition-colors"
                               >
                                 ADD
                               </motion.button>
@@ -596,7 +836,9 @@ export default function MenuPage() {
           {/* Uncategorized items */}
           {groupedItems.has(-1) && (
             <div>
-              <h2 className="text-lg font-bold text-slate-800 mb-4">Other Items</h2>
+              <h2 className="text-lg font-bold text-slate-800 mb-4">
+                Other Items
+              </h2>
               <div className="space-y-3">
                 {groupedItems.get(-1)?.map((item) => {
                   const itemQty = getItemQuantity(item.id);
@@ -609,10 +851,17 @@ export default function MenuPage() {
                         <div className="flex items-center gap-1.5 mb-1">
                           <DietaryBadge type={item.dietary_type} />
                         </div>
-                        <h3 className="font-semibold text-slate-900">{item.name}</h3>
-                        <p className="font-medium text-emerald-700 text-sm">{formatCurrency(item.price)}</p>
+                        <h3 className="font-semibold text-slate-900">
+                          {item.name}
+                        </h3>
+                        <p className="font-medium text-emerald-700 text-sm">
+                          {formatCurrency(item.price)}
+                        </p>
                       </div>
-                      <div className="flex flex-col items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <div
+                        className="flex flex-col items-center gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {itemQty > 0 ? (
                           <QuantityStepper itemId={item.id} />
                         ) : (
@@ -634,10 +883,12 @@ export default function MenuPage() {
 
           {/* No results */}
           {filteredItems.length === 0 && (
-            <div className="text-center py-16">
-              <p className="text-4xl mb-4">🔍</p>
-              <p className="text-slate-500 font-medium">No items found</p>
-              <p className="text-slate-400 text-sm mt-1">Try a different search or filter</p>
+            <div className="text-center py-14 px-6 bg-white rounded-3xl border border-slate-100">
+              <Sparkles className="w-9 h-9 text-amber-500 mx-auto mb-4" />
+              <p className="text-slate-700 font-bold">No dishes found</p>
+              <p className="text-slate-400 text-sm mt-1">
+                Try another search or clear your filters.
+              </p>
               {(search || activeFilters.size > 0) && (
                 <button
                   onClick={() => {
@@ -661,7 +912,7 @@ export default function MenuPage() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 100, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="fixed bottom-4 left-4 right-4 z-50"
+              className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 right-4 z-50"
             >
               <motion.button
                 whileTap={{ scale: 0.97 }}
@@ -678,7 +929,8 @@ export default function MenuPage() {
                     {totalItems}
                   </motion.span>
                   <span className="font-semibold">
-                    {totalItems === 1 ? "1 item" : `${totalItems} items`} · View Cart
+                    {totalItems === 1 ? "1 item" : `${totalItems} items`} · View
+                    Cart
                   </span>
                 </div>
                 <motion.span

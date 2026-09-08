@@ -1,5 +1,12 @@
 import { create } from "zustand";
-import type { Restaurant, TableInfo, Session, MenuItem, Category } from "@/types";
+import { persist } from "zustand/middleware";
+import type {
+  Restaurant,
+  TableInfo,
+  Session,
+  MenuItem,
+  Category,
+} from "@/types";
 
 interface SessionState {
   guestToken: string | null;
@@ -25,42 +32,9 @@ interface SessionState {
   reset: () => void;
 }
 
-export const useSessionStore = create<SessionState>((set) => ({
-  guestToken: null,
-  restaurant: null,
-  table: null,
-  session: null,
-  menuItems: [],
-  categories: [],
-  orderingEnabled: false,
-  canStartSession: false,
-  setFromScan: (data) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("guest_token", data.guest_token);
-    }
-    set({
-      guestToken: data.guest_token,
-      restaurant: data.restaurant,
-      table: data.table,
-      session: data.session,
-      menuItems: data.menu_items,
-      categories: data.categories,
-      orderingEnabled: data.ordering_enabled,
-      canStartSession: data.can_start_session,
-    });
-  },
-  updateSession: (session) => set({ session }),
-  updateToken: (token) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("guest_token", token);
-    }
-    set({ guestToken: token });
-  },
-  reset: () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("guest_token");
-    }
-    set({
+export const useSessionStore = create<SessionState>()(
+  persist(
+    (set) => ({
       guestToken: null,
       restaurant: null,
       table: null,
@@ -69,6 +43,43 @@ export const useSessionStore = create<SessionState>((set) => ({
       categories: [],
       orderingEnabled: false,
       canStartSession: false,
-    });
-  },
-}));
+      setFromScan: (data) => {
+        set({
+          guestToken: data.guest_token,
+          restaurant: data.restaurant,
+          table: data.table,
+          session: data.session,
+          menuItems: data.menu_items,
+          categories: data.categories,
+          orderingEnabled: data.ordering_enabled,
+          canStartSession: data.can_start_session,
+        });
+      },
+      updateSession: (session) => set({ session }),
+      updateToken: (token) => {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("guest_token", token);
+        }
+        set({ guestToken: token, orderingEnabled: true });
+      },
+      reset: () => {
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("guest_token");
+        }
+        set({
+          guestToken: null,
+          restaurant: null,
+          table: null,
+          session: null,
+          menuItems: [],
+          categories: [],
+          orderingEnabled: false,
+          canStartSession: false,
+        });
+      },
+    }),
+    {
+      name: "session-storage",
+    },
+  ),
+);

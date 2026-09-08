@@ -1,80 +1,80 @@
 "use client";
-import { useState } from "react";
+
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowLeft, CheckCircle2, ShieldCheck } from "lucide-react";
 import { useCartStore } from "@/stores/useCartStore";
 import { useSessionStore } from "@/stores/useSessionStore";
 import { api } from "@/lib/api";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, getErrorMessage } from "@/lib/utils";
-import { ArrowLeft } from "lucide-react";
 
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, getTotalPrice, clearCart } = useCartStore();
-  const { guestToken } = useSessionStore();
+  const { guestToken, restaurant, table } = useSessionStore();
   const [loading, setLoading] = useState(false);
-  const [showCaptcha, setShowCaptcha] = useState(false);
-  const [orderId, setOrderId] = useState<number | null>(null);
-  const [captchaCode, setCaptchaCode] = useState("");
-  const [inputCode, setInputCode] = useState("");
-  
+  const [error, setError] = useState("");
+  const [quotedTotal, setQuotedTotal] = useState<string | null>(null);
+
   const subtotal = getTotalPrice();
-  const tax = subtotal * 0.05;
-  const grandTotal = subtotal + tax;
+
+  useEffect(() => {
+    if (!guestToken || items.length === 0) return;
+    api
+      .quoteOrder(
+        guestToken,
+        items.map((item) => ({
+          menu_item: item.menuItemId,
+          quantity: item.quantity,
+        })),
+      )
+      .then((quote) => setQuotedTotal(quote.grand_total))
+      .catch(() => setQuotedTotal(null));
+  }, [guestToken, items]);
 
   const handlePlaceOrder = async () => {
-    if (!guestToken) return;
+    if (!guestToken || items.length === 0) return;
     setLoading(true);
+    setError("");
     try {
-      const orderItems = items.map(i => ({ menu_item: i.menuItemId, quantity: i.quantity }));
-      const res = await api.placeOrder(guestToken, Date.now().toString(), orderItems);
-      setOrderId(res.id);
-      setCaptchaCode(res.captcha_code);
-      setShowCaptcha(true);
-    } catch (err: unknown) {
-      alert(getErrorMessage(err, "Failed to place order"));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerify = async () => {
-    if (!guestToken || !orderId) return;
-    if (inputCode !== captchaCode) {
-      alert("Invalid code");
-      return;
-    }
-    setLoading(true);
-    try {
-      await api.verifyCaptcha(guestToken, orderId, inputCode);
+      await api.placeOrder(
+        guestToken,
+        crypto.randomUUID(),
+        items.map((item) => ({
+          menu_item: item.menuItemId,
+          quantity: item.quantity,
+          notes: item.specialInstructions,
+        })),
+      );
       clearCart();
-      router.push("/tracking");
+      router.replace("/tracking");
     } catch (err: unknown) {
-      alert(getErrorMessage(err, "Verification failed"));
+      setError(
+        getErrorMessage(
+          err,
+          "We could not place your order. Please try again.",
+        ),
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  if (showCaptcha) {
+  if (items.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-slate-900/50 backdrop-blur-sm">
-        <div className="bg-white p-8 rounded-3xl w-full max-w-sm text-center">
-          <h2 className="text-xl font-bold mb-2">Verify Your Order</h2>
-          <p className="text-slate-500 mb-6">Enter the code shown below</p>
-          <div className="text-4xl font-mono tracking-[0.5em] font-bold text-slate-800 mb-6 bg-slate-100 py-4 rounded-xl">
-            {captchaCode}
-          </div>
-          <input 
-            type="text" 
-            maxLength={4}
-            value={inputCode}
-            onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-            className="w-full text-center text-2xl tracking-[0.5em] font-mono py-3 border-2 border-slate-200 rounded-xl mb-6 outline-none focus:border-emerald-500"
-            placeholder="----"
-          />
-          <Button className="w-full" onClick={handleVerify} loading={loading}>Confirm Order</Button>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center">
+        <div className="max-w-sm bg-white rounded-3xl border border-slate-100 p-8 shadow-sm">
+          <h1 className="text-xl font-bold text-slate-900 mb-2">
+            Your cart is empty
+          </h1>
+          <p className="text-sm text-slate-500 mb-6">
+            Add a dish before sending your order to the kitchen.
+          </p>
+          <Button onClick={() => router.replace("/menu")} className="w-full">
+            Explore menu
+          </Button>
         </div>
       </div>
     );
@@ -82,36 +82,81 @@ export default function CheckoutPage() {
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-slate-50 flex flex-col">
-        <div className="bg-white p-4 flex items-center border-b border-slate-100">
-          <button onClick={() => router.back()} className="p-2 -ml-2 text-slate-600">
-            <ArrowLeft className="w-6 h-6" />
+      <div className="min-h-screen bg-slate-50 pb-[calc(8rem+env(safe-area-inset-bottom))]">
+        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-100 px-4 py-3 flex items-center gap-3">
+          <button
+            onClick={() => router.back()}
+            className="w-11 h-11 grid place-items-center rounded-full bg-slate-100 text-slate-700"
+            aria-label="Back to cart"
+          >
+            <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-lg font-bold ml-2">Checkout</h1>
-        </div>
-
-        <div className="p-6">
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 space-y-4">
-            <h2 className="font-bold text-slate-800 mb-4">Bill Summary</h2>
-            <div className="flex justify-between text-slate-600">
-              <span>Item Total</span>
-              <span>{formatCurrency(subtotal)}</span>
-            </div>
-            <div className="flex justify-between text-slate-600 pb-4 border-b border-slate-100">
-              <span>Taxes (5%)</span>
-              <span>{formatCurrency(tax)}</span>
-            </div>
-            <div className="flex justify-between font-bold text-lg pt-2">
-              <span>Grand Total</span>
-              <span>{formatCurrency(grandTotal)}</span>
-            </div>
+          <div>
+            <h1 className="font-bold text-slate-900">Review order</h1>
+            <p className="text-xs text-slate-500">
+              {restaurant?.name} · Table {table?.number}
+            </p>
           </div>
-        </div>
-
-        <div className="mt-auto p-6">
-          <Button className="w-full py-4 text-lg" onClick={handlePlaceOrder} loading={loading}>
-            Place Order
-          </Button>
+        </header>
+        <main className="max-w-lg mx-auto p-4 space-y-4">
+          <section className="bg-white rounded-3xl border border-slate-100 p-5 shadow-sm">
+            <h2 className="font-bold text-slate-900 mb-4">Your dishes</h2>
+            <div className="space-y-3">
+              {items.map((item) => (
+                <div
+                  className="flex justify-between gap-4 text-sm"
+                  key={item.menuItemId}
+                >
+                  <div>
+                    <p className="font-semibold text-slate-800">
+                      {item.quantity}× {item.menuItemName}
+                    </p>
+                    {item.variant && (
+                      <p className="text-xs text-slate-500">
+                        {item.variant.name}
+                      </p>
+                    )}
+                  </div>
+                  <p className="font-bold text-slate-800">
+                    {formatCurrency(item.price * item.quantity)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="bg-emerald-50 rounded-3xl border border-emerald-100 p-5">
+            <div className="flex gap-3">
+              <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0" />
+              <p className="text-sm leading-6 text-emerald-900">
+                Prices and availability are checked by the restaurant when your
+                order is sent. Final taxes and charges, if any, appear on your
+                bill.
+              </p>
+            </div>
+          </section>
+          {error && (
+            <p className="text-sm font-medium text-red-600 px-1">{error}</p>
+          )}
+        </main>
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-100 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="max-w-lg mx-auto flex items-center gap-4">
+            <div className="flex-1">
+              <p className="text-xs text-slate-500">
+                Restaurant-checked item total
+              </p>
+              <p className="text-xl font-extrabold text-slate-900">
+                {formatCurrency(quotedTotal ?? subtotal)}
+              </p>
+            </div>
+            <Button
+              onClick={handlePlaceOrder}
+              loading={loading}
+              className="min-h-12 px-6 bg-emerald-600 hover:bg-emerald-700"
+            >
+              <CheckCircle2 className="w-5 h-5 mr-2" />
+              Place order
+            </Button>
+          </div>
         </div>
       </div>
     </PageTransition>

@@ -17,13 +17,21 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <input
           ref={ref}
           value={value}
-          onFocus={(e) => { setFocused(true); onFocus?.(e); }}
-          onBlur={(e) => { setFocused(false); onBlur?.(e); }}
+          onFocus={(e) => {
+            setFocused(true);
+            onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setFocused(false);
+            onBlur?.(e);
+          }}
           className={cn(
             "w-full px-4 pt-6 pb-2 text-base bg-white border-2 rounded-2xl outline-none transition-all peer",
-            focused ? "border-emerald-500 ring-4 ring-emerald-500/10" : "border-slate-200",
+            focused
+              ? "border-emerald-500 ring-4 ring-emerald-500/10"
+              : "border-slate-200",
             error ? "border-red-400 ring-4 ring-red-400/10" : "",
-            className
+            className,
           )}
           placeholder=" "
           {...props}
@@ -35,7 +43,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           }}
           className={cn(
             "absolute left-4 top-4 text-slate-400 pointer-events-none origin-left transition-colors",
-            focused ? "text-emerald-600" : ""
+            focused ? "text-emerald-600" : "",
           )}
         >
           {label}
@@ -54,6 +62,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         </AnimatePresence>
       </div>
     );
-  }
+  },
 );
 Input.displayName = "Input";

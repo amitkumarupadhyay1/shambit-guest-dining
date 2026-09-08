@@ -65,7 +65,15 @@ export interface OrderItem {
 
 export interface Order {
   id: number;
-  lifecycle: "UNAPPROVED" | "NEW" | "ACCEPTED" | "PREPARING" | "READY" | "DELIVERED" | "COMPLETED" | "CANCELLED";
+  lifecycle:
+    | "UNAPPROVED"
+    | "NEW"
+    | "ACCEPTED"
+    | "PREPARING"
+    | "READY"
+    | "DELIVERED"
+    | "COMPLETED"
+    | "CANCELLED";
   items: OrderItem[];
 }
 
@@ -104,7 +112,13 @@ export interface BillSummary {
   restaurant: { name: string; address: string; logo: string | null };
   table_number: string;
   session_id: number;
-  items: { name: string; variant: string | null; quantity: number; unit_price: string; line_total: string }[];
+  items: {
+    name: string;
+    variant: string | null;
+    quantity: number;
+    unit_price: string;
+    line_total: string;
+  }[];
   subtotal: string;
   taxes: { name: string; rate: string; amount: string }[];
   tax_total: string;
