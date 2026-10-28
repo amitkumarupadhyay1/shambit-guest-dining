@@ -19,18 +19,32 @@ export default function ScanPage({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     async function scan() {
       try {
         const data = await api.scan(code);
-        setFromScan(data);
+        if (cancelled) return;
+        setFromScan(data, code);
         // A QR scan begins a new guest journey. Collect the guest details
         // before showing any menu items.
-        router.replace("/register");
+        router.replace(
+          data.context_type === "ROOM_SERVICE"
+            ? "/welcome"
+            : data.session
+              ? "/menu"
+              : "/register",
+        );
       } catch (err: unknown) {
-        setError(getErrorMessage(err, "Failed to scan table code."));
+        if (cancelled) return;
+        setError(
+          getErrorMessage(err, "Could not open this code. Please try again."),
+        );
       }
     }
-    scan();
+    void scan();
+    return () => {
+      cancelled = true;
+    };
   }, [code, router, setFromScan]);
 
   return (
@@ -56,7 +70,7 @@ export default function ScanPage({
               />
             </div>
             <h1 className="text-2xl font-bold text-white mb-2">
-              Preparing your table...
+              Preparing your welcome…
             </h1>
             <p className="text-amber-400 font-medium">Getting the menu ready</p>
           </div>

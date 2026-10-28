@@ -10,8 +10,15 @@ import { getErrorMessage } from "@/lib/utils";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { guestToken, restaurant, table, updateToken, canStartSession } =
-    useSessionStore();
+  const {
+    guestToken,
+    restaurant,
+    table,
+    updateToken,
+    canStartSession,
+    contextType,
+    updateSession,
+  } = useSessionStore();
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -43,6 +50,8 @@ export default function RegisterPage() {
         guestEmail || undefined,
       );
       updateToken(res.guest_token);
+      const state = await api.getSessionStatus();
+      updateSession(state.session);
       router.push("/menu");
     } catch (err: unknown) {
       setError(getErrorMessage(err, "Something went wrong."));
@@ -51,6 +60,7 @@ export default function RegisterPage() {
     }
   };
 
+  if (contextType === "ROOM_SERVICE") return <RoomRegistration />;
   if (!restaurant || !table) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400">
@@ -165,6 +175,151 @@ export default function RegisterPage() {
           </form>
         </div>
       </div>
+    </PageTransition>
+  );
+}
+
+function RoomRegistration() {
+  const router = useRouter();
+  const {
+    guestToken,
+    restaurant,
+    table,
+    updateToken,
+    updateSession,
+    serviceAvailable,
+  } = useSessionStore();
+  const [phone, setPhone] = useState("+91");
+  const [challenge, setChallenge] = useState("");
+  const [otp, setOtp] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (!guestToken || !restaurant || !table)
+    return (
+      <div className="min-h-dvh grid place-items-center p-6">
+        Scan the room QR to begin.
+      </div>
+    );
+  return (
+    <PageTransition>
+      <main className="min-h-dvh bg-slate-950 px-5 py-10 text-white grid place-items-center">
+        <div className="w-full max-w-sm">
+          <button
+            onClick={() => router.replace("/welcome")}
+            className="mb-8 text-sm text-slate-300"
+          >
+            ← Back
+          </button>
+          <p className="text-amber-400 text-sm font-semibold">
+            {restaurant.hotel_name || restaurant.name} · Room {table.number}
+          </p>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight">
+            {challenge ? "Check your phone" : "Welcome to room service"}
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            {challenge
+              ? "If your mobile matches this stay, we’ve sent a verification code."
+              : "Use the mobile number registered for your stay."}
+          </p>
+          {!serviceAvailable ? (
+            <p className="mt-6 rounded-2xl bg-white/5 p-5">
+              Room service is paused. Please contact reception.
+            </p>
+          ) : (
+            <form
+              className="mt-7 space-y-5"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (busy) return;
+                setBusy(true);
+                setError("");
+                try {
+                  if (!challenge) {
+                    const sent = await api.requestRoomVerification(
+                      guestToken,
+                      phone.trim(),
+                    );
+                    setChallenge(sent.challenge);
+                  } else {
+                    const result = await api.verifyRoom(
+                      guestToken,
+                      challenge,
+                      otp.trim(),
+                    );
+                    updateToken(result.guest_token);
+                    updateSession(result.session);
+                    router.replace("/welcome");
+                  }
+                } catch (failure) {
+                  setError(
+                    getErrorMessage(
+                      failure,
+                      "Verification failed. Please try again.",
+                    ),
+                  );
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {!challenge ? (
+                <Input
+                  label="Registered mobile"
+                  type="tel"
+                  autoComplete="tel"
+                  inputMode="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  maxLength={20}
+                  required
+                />
+              ) : (
+                <Input
+                  label="Verification code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                  minLength={4}
+                  maxLength={6}
+                  required
+                />
+              )}
+              {error && (
+                <p role="alert" className="text-sm text-rose-300">
+                  {error}
+                </p>
+              )}
+              <Button
+                type="submit"
+                loading={busy}
+                disabled={busy}
+                className="w-full min-h-12"
+              >
+                {challenge ? "Verify & continue" : "Send code"}
+              </Button>
+              {challenge && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setChallenge("");
+                    setOtp("");
+                    setError("");
+                  }}
+                  className="w-full py-3 text-sm text-slate-300"
+                >
+                  Change number / resend
+                </button>
+              )}
+            </form>
+          )}
+          <p className="mt-7 text-xs leading-5 text-slate-400">
+            Need help? Reception can check your registered details or take your
+            order.
+          </p>
+        </div>
+      </main>
     </PageTransition>
   );
 }

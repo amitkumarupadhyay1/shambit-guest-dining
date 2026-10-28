@@ -16,7 +16,7 @@ import { PageTransition } from "@/components/shared/PageTransition";
 import { DietaryBadge } from "@/components/shared/DietaryBadge";
 import { MenuItemSkeleton } from "@/components/shared/LoadingSkeleton";
 import { Button } from "@/components/ui/Button";
-import { formatCurrency } from "@/lib/utils";
+import { getErrorMessage, formatCurrency } from "@/lib/utils";
 import { api } from "@/lib/api";
 import {
   Search,
@@ -115,16 +115,29 @@ function ItemDetailSheet({
   );
   const [instructions, setInstructions] = useState("");
 
+  const allModifiers = Array.from(
+    new Map(
+      [
+        ...item.modifiers,
+        ...(item.modifier_groups ?? []).flatMap((group) => group.modifiers),
+      ].map((modifier) => [modifier.id, modifier]),
+    ).values(),
+  );
+  const incompleteGroup = (item.modifier_groups ?? []).find(
+    (group) =>
+      group.modifiers.filter((modifier) => selectedModifiers.has(modifier.id))
+        .length < group.min_selections,
+  );
   const basePrice = selectedVariant
     ? parseFloat(selectedVariant.price)
     : parseFloat(item.price);
-  const modifierTotal = item.modifiers
+  const modifierTotal = allModifiers
     .filter((m) => selectedModifiers.has(m.id))
     .reduce((sum, m) => sum + parseFloat(m.price_adjustment), 0);
   const totalPrice = (basePrice + modifierTotal) * qty;
 
   const handleAdd = () => {
-    const mods = item.modifiers.filter((m) => selectedModifiers.has(m.id));
+    const mods = allModifiers.filter((m) => selectedModifiers.has(m.id));
     onAddToCart(
       item,
       qty,
@@ -149,7 +162,10 @@ function ItemDetailSheet({
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
         transition={{ type: "spring", damping: 30, stiffness: 300 }}
-        className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-50 max-h-[85vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-label={item.name}
+        className="fixed bottom-0 left-0 right-0 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-xl bg-white rounded-t-3xl z-50 max-h-[90dvh] overflow-y-auto pb-[env(safe-area-inset-bottom)]"
       >
         {/* Hero Image */}
         {item.image && (
@@ -289,6 +305,55 @@ function ItemDetailSheet({
             </div>
           )}
 
+          {(item.modifier_groups ?? []).map((group) => {
+            const count = group.modifiers.filter((modifier) =>
+              selectedModifiers.has(modifier.id),
+            ).length;
+            return (
+              <fieldset key={group.id} className="mb-6">
+                <legend className="text-sm font-bold text-slate-800">
+                  {group.name}{" "}
+                  <span className="font-normal text-slate-500">
+                    ·{" "}
+                    {group.min_selections > 0
+                      ? `Choose ${group.min_selections}${group.max_selections > group.min_selections ? `–${group.max_selections}` : ""}`
+                      : `Up to ${group.max_selections}`}
+                  </span>
+                </legend>
+                <div className="mt-3 space-y-2">
+                  {group.modifiers.map((modifier) => (
+                    <label
+                      key={modifier.id}
+                      className="flex items-center gap-3 rounded-xl border p-3 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedModifiers.has(modifier.id)}
+                        disabled={
+                          !selectedModifiers.has(modifier.id) &&
+                          group.max_selections > 0 &&
+                          count >= group.max_selections
+                        }
+                        onChange={(event) => {
+                          const next = new Set(selectedModifiers);
+                          if (event.target.checked) next.add(modifier.id);
+                          else next.delete(modifier.id);
+                          setSelectedModifiers(next);
+                        }}
+                      />
+                      <span className="min-w-0 flex-1">{modifier.name}</span>
+                      <span>+{formatCurrency(modifier.price_adjustment)}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            );
+          })}
+          {incompleteGroup && (
+            <p className="mb-4 text-sm text-slate-600">
+              Choose an option for {incompleteGroup.name}.
+            </p>
+          )}
           {/* Special Instructions */}
           <div className="mb-6">
             <h3 className="text-sm font-bold text-slate-800 mb-2">
@@ -304,8 +369,8 @@ function ItemDetailSheet({
           </div>
 
           {/* Quantity & Add */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3 bg-slate-100 rounded-full p-1">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+            <div className="flex items-center justify-center gap-3 bg-slate-100 rounded-full p-1">
               <button
                 onClick={() => setQty(Math.max(1, qty - 1))}
                 className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-700"
@@ -320,7 +385,11 @@ function ItemDetailSheet({
                 <Plus className="w-4 h-4" />
               </button>
             </div>
-            <Button className="flex-1 py-4 text-base" onClick={handleAdd}>
+            <Button
+              className="flex-1 min-w-0 py-4 text-sm sm:text-base"
+              disabled={!!incompleteGroup}
+              onClick={handleAdd}
+            >
               Add to Cart — {formatCurrency(totalPrice)}
             </Button>
           </div>
@@ -332,6 +401,14 @@ function ItemDetailSheet({
 
 // ─── Quantity Stepper (inline on menu card) ───────────────────
 function QuantityStepper({ itemId }: { itemId: number }) {
+  const router = useRouter();
+  const custom = useCartStore((s) =>
+    s.items.some(
+      (row) =>
+        row.menuItemId === itemId &&
+        (row.variant || row.modifiers?.length || row.specialInstructions),
+    ),
+  );
   const qty = useCartStore((s) => s.getItemQuantity(itemId));
   const updateQuantity = useCartStore((s) => s.updateQuantity);
 
@@ -346,7 +423,8 @@ function QuantityStepper({ itemId }: { itemId: number }) {
       <button
         onClick={(e) => {
           e.stopPropagation();
-          updateQuantity(itemId, qty - 1);
+          if (custom) router.push("/cart");
+          else updateQuantity(itemId, qty - 1);
         }}
         className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-700"
       >
@@ -358,7 +436,8 @@ function QuantityStepper({ itemId }: { itemId: number }) {
       <button
         onClick={(e) => {
           e.stopPropagation();
-          updateQuantity(itemId, qty + 1);
+          if (custom) router.push("/cart");
+          else updateQuantity(itemId, qty + 1);
         }}
         className="w-8 h-8 rounded-full bg-emerald-500 shadow-sm flex items-center justify-center text-white"
       >
@@ -373,8 +452,17 @@ const emptySubscribe = () => () => {};
 // ─── Main Menu Page ───────────────────────────────────────────
 export default function MenuPage() {
   const router = useRouter();
-  const { restaurant, table, menuItems, categories, guestToken } =
-    useSessionStore();
+  const {
+    restaurant,
+    table,
+    menuItems,
+    categories,
+    guestToken,
+    contextType,
+    session,
+    orderingEnabled,
+    serviceAvailable,
+  } = useSessionStore();
   const { addItem, getTotalItems, getTotalPrice, getItemQuantity } =
     useCartStore();
 
@@ -385,6 +473,7 @@ export default function MenuPage() {
   const [sortBy, setSortBy] = useState<SortKey>("FEATURED");
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [helpMessage, setHelpMessage] = useState("");
   const [callingCaptain, setCallingCaptain] = useState(false);
   const isMounted = useSyncExternalStore(
     emptySubscribe,
@@ -502,11 +591,21 @@ export default function MenuPage() {
 
   const handleCallCaptain = async () => {
     if (!guestToken || callingCaptain) return;
+    if (!session) {
+      router.push("/register");
+      return;
+    }
     setCallingCaptain(true);
     try {
       await api.callCaptain(guestToken);
-    } catch {
-      // silently handle
+      setHelpMessage("The team has your request.");
+    } catch (failure) {
+      setHelpMessage(
+        getErrorMessage(
+          failure,
+          "Could not contact the team. Please try again.",
+        ),
+      );
     } finally {
       setTimeout(() => setCallingCaptain(false), 3000);
     }
@@ -514,13 +613,21 @@ export default function MenuPage() {
 
   const handleAddItem = useCallback(
     (item: MenuItem) => {
-      if (item.variants.length > 0 || item.modifiers.length > 0) {
+      if (!session || !orderingEnabled) {
+        router.push(session ? "/tracking" : "/register");
+        return;
+      }
+      if (
+        item.variants.length > 0 ||
+        item.modifiers.length > 0 ||
+        item.modifier_groups?.length
+      ) {
         setSelectedItem(item);
       } else {
         addItem(item);
       }
     },
-    [addItem],
+    [addItem, session, orderingEnabled, router],
   );
 
   const totalItems = getTotalItems();
@@ -574,6 +681,14 @@ export default function MenuPage() {
       <div className="min-h-screen bg-slate-50 pb-[calc(8rem+env(safe-area-inset-bottom))]">
         {/* ── Sticky Header ── */}
         <div className="sticky top-0 bg-white/95 backdrop-blur-xl z-40 border-b border-slate-100">
+          {helpMessage && (
+            <p
+              role="status"
+              className="px-4 py-3 text-sm text-emerald-800 bg-emerald-50"
+            >
+              {helpMessage}
+            </p>
+          )}
           {/* Row 1: Restaurant info + Call Captain */}
           <div className="flex justify-between items-center px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 gap-3">
             <div className="flex items-center gap-3">
@@ -595,7 +710,9 @@ export default function MenuPage() {
                   {restaurant.name}
                 </h1>
                 <p className="text-xs font-medium text-slate-500">
-                  Table {table?.number} · Order at your pace
+                  {contextType === "ROOM_SERVICE" ? "Room" : "Table"}{" "}
+                  {table?.number} ·{" "}
+                  {serviceAvailable ? "Order at your pace" : "Service paused"}
                 </p>
               </div>
             </div>
@@ -953,6 +1070,10 @@ export default function MenuPage() {
               item={selectedItem}
               onClose={() => setSelectedItem(null)}
               onAddToCart={(item, qty, variant, mods, instructions) => {
+                if (!session || !orderingEnabled) {
+                  router.push(session ? "/tracking" : "/register");
+                  return;
+                }
                 addItem(item, qty, variant, mods, instructions);
               }}
             />

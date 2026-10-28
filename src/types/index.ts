@@ -4,6 +4,7 @@ export interface Restaurant {
   hotel_name: string;
   address: string;
   welcome_message: string;
+  service_instructions?: string;
   cover_image: string | null;
   logo: string | null;
   accent_color: string;
@@ -53,9 +54,18 @@ export interface MenuItem {
   prep_time_minutes: number | null;
   variants: MenuItemVariant[];
   modifiers: MenuItemModifier[];
+  modifier_groups?: Array<{
+    id: number;
+    name: string;
+    min_selections: number;
+    max_selections: number;
+    modifiers: MenuItemModifier[];
+  }>;
 }
 
 export interface OrderItem {
+  name?: string;
+  variant_name?: string | null;
   id: number;
   menu_item: number;
   quantity: number;
@@ -78,6 +88,9 @@ export interface Order {
 }
 
 export interface Session {
+  order_type?: string;
+  room_number?: string | null;
+  guest_name?: string | null;
   id: number;
   status: "OPEN" | "BILL_REQUESTED" | "PAID" | "CLOSED";
   requested_payment_method: string | null;
@@ -90,6 +103,9 @@ export interface TableInfo {
 }
 
 export interface ScanResponse {
+  context_type?: "DINE_IN" | "ROOM_SERVICE";
+  service_available?: boolean;
+  room?: TableInfo;
   guest_token: string;
   restaurant: Restaurant;
   table: TableInfo;

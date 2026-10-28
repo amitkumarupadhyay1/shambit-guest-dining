@@ -13,7 +13,7 @@ import { Download, QrCode } from "lucide-react";
 export default function BillPage() {
   const router = useRouter();
   const [bill, setBill] = useState<BillSummary | null>(null);
-  const { restaurant } = useSessionStore();
+  const { restaurant, contextType } = useSessionStore();
 
   useEffect(() => {
     api.getBillSummary().then(setBill).catch(console.error);
@@ -63,7 +63,8 @@ export default function BillPage() {
               )}
               <p className="text-slate-500 text-xs">{restaurant.address}</p>
               <p className="text-slate-900 text-sm mt-3 font-bold bg-slate-100 inline-block px-4 py-1 rounded-full">
-                Table {bill.table_number}
+                {contextType === "ROOM_SERVICE" ? "Room" : "Table"}{" "}
+                {bill.table_number}
               </p>
             </div>
 
@@ -144,7 +145,9 @@ export default function BillPage() {
               className="w-full py-4 text-lg bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all"
               onClick={() => router.push("/thank-you")}
             >
-              Done / Pay at Counter
+              {contextType === "ROOM_SERVICE"
+                ? "Done · settle with the hotel"
+                : "Done / Pay at Counter"}
             </Button>
           </div>
         </div>

@@ -1,4 +1,7 @@
 "use client";
+import { useState } from "react";
+import { api } from "@/lib/api";
+import { getErrorMessage } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useSessionStore } from "@/stores/useSessionStore";
@@ -7,82 +10,147 @@ import { Button } from "@/components/ui/Button";
 
 export default function WelcomePage() {
   const router = useRouter();
-  const { restaurant, table, session } = useSessionStore();
-
-  if (!restaurant || !table) {
+  const {
+    restaurant,
+    table,
+    session,
+    contextType,
+    serviceAvailable,
+    guestToken,
+    updateToken,
+    updateSession,
+  } = useSessionStore();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (!restaurant || !table)
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400">
-        Loading...
-      </div>
+      <main className="min-h-dvh grid place-items-center bg-slate-950 p-6 text-slate-300">
+        Scan your room or table QR to begin.
+      </main>
     );
-  }
-
-  const handleStart = () => {
-    if (session) {
-      router.push("/menu");
-    } else {
-      router.push("/register");
-    }
-  };
-
+  const room = contextType === "ROOM_SERVICE";
   return (
     <PageTransition>
-      <div className="min-h-screen flex flex-col items-center justify-between p-6 bg-slate-900 text-slate-50 relative overflow-hidden">
-        {/* Abstract Background Accents */}
-        <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="w-full flex justify-center mt-12 relative z-10">
-          <div className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700/50 backdrop-blur-md shadow-2xl">
+      <main className="relative isolate min-h-dvh overflow-hidden bg-slate-950 px-5 py-8 text-white flex items-center justify-center">
+        {restaurant.cover_image && (
+          <Image
+            unoptimized
+            src={restaurant.cover_image}
+            alt=""
+            fill
+            sizes="100vw"
+            className="object-cover opacity-20 -z-10"
+            priority
+          />
+        )}
+        <div className="pointer-events-none absolute -z-10 inset-0 bg-gradient-to-b from-slate-950/20 via-slate-950/70 to-slate-950" />
+        <section className="w-full max-w-md py-8 text-center">
+          <div className="mx-auto mb-8 grid h-24 w-24 place-items-center overflow-hidden rounded-3xl border border-white/15 bg-white p-3 shadow-xl">
             <Image
-              src="/logo.png"
-              alt="Logo"
-              width={120}
-              height={120}
-              className="object-contain"
-              priority
+              unoptimized
+              src={restaurant.logo || "/logo.png"}
+              alt={restaurant.hotel_name || restaurant.name}
+              width={96}
+              height={96}
+              className="h-full w-full object-contain"
             />
           </div>
-        </div>
-
-        <div className="w-full max-w-md relative z-10 flex flex-col items-center text-center mt-8 flex-1">
-          <div className="inline-block bg-amber-500/20 text-amber-400 border border-amber-500/30 px-5 py-1.5 rounded-full text-sm font-semibold tracking-wide mb-8 shadow-sm">
-            Table {table.number}
-          </div>
-          <h1 className="text-4xl font-extrabold text-white mb-2 tracking-tight">
-            {restaurant.name}
-          </h1>
-          {restaurant.hotel_name && (
-            <p className="text-lg font-medium text-amber-400 mb-2">
-              at {restaurant.hotel_name}
-            </p>
-          )}
-          <p className="text-slate-400 text-sm max-w-[250px] mx-auto mb-8 leading-relaxed">
-            {restaurant.address}
+          <p className="inline-flex rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-amber-300">
+            {room ? "Room" : "Table"} {table.number}
           </p>
-
-          <div className="relative">
-            <span className="absolute -left-4 -top-2 text-3xl text-slate-700 font-serif">
-              &quot;
-            </span>
-            <p className="text-slate-300 font-medium italic text-lg px-6 leading-relaxed">
-              {restaurant.welcome_message}
-            </p>
-            <span className="absolute -right-4 -bottom-4 text-3xl text-slate-700 font-serif">
-              &quot;
-            </span>
+          <h1 className="mt-6 text-3xl sm:text-4xl font-semibold tracking-tight break-words">
+            {session?.guest_name
+              ? `Welcome, ${session.guest_name}`
+              : room
+                ? "Make yourself at home"
+                : "A seat at our table"}
+          </h1>
+          <p className="mt-3 text-lg text-white/90 break-words">
+            {restaurant.hotel_name || restaurant.name}
+          </p>
+          <p className="mt-5 mx-auto max-w-sm text-sm leading-6 text-slate-300 break-words">
+            {restaurant.welcome_message || "Freshly prepared, just for you."}
+          </p>
+          {restaurant.service_instructions && (
+            <details className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-left text-sm">
+              <summary className="cursor-pointer font-medium">
+                Service details
+              </summary>
+              <p className="mt-3 leading-6 text-slate-300 whitespace-pre-wrap">
+                {restaurant.service_instructions}
+              </p>
+            </details>
+          )}
+          <div className="mt-9 space-y-3">
+            <Button
+              className="w-full min-h-14 rounded-2xl bg-amber-400 text-slate-950 hover:bg-amber-300"
+              disabled={!serviceAvailable && !session}
+              loading={busy}
+              onClick={async () => {
+                if (busy) return;
+                if (
+                  room &&
+                  session &&
+                  !["OPEN", "BILL_REQUESTED"].includes(session.status) &&
+                  guestToken
+                ) {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    const result =
+                      await api.startVerifiedRoomSession(guestToken);
+                    updateToken(result.guest_token);
+                    updateSession(result.session);
+                    router.push("/menu");
+                  } catch (failure) {
+                    setError(
+                      getErrorMessage(
+                        failure,
+                        "Could not resume this stay. Scan the room code again.",
+                      ),
+                    );
+                  } finally {
+                    setBusy(false);
+                  }
+                } else
+                  router.push(
+                    session
+                      ? session.status === "OPEN"
+                        ? "/menu"
+                        : "/tracking"
+                      : "/register",
+                  );
+              }}
+            >
+              {!serviceAvailable && !session
+                ? "Room service is paused"
+                : session
+                  ? "Continue"
+                  : room
+                    ? "Order to your room"
+                    : "Explore the menu"}
+            </Button>
+            {room && !session && (
+              <button
+                onClick={() => router.push("/menu")}
+                className="w-full py-3 text-sm text-slate-300"
+              >
+                Browse menu
+              </button>
+            )}
+            {error && (
+              <p role="alert" className="text-sm text-rose-300">
+                {error}
+              </p>
+            )}
+            {!serviceAvailable && (
+              <p className="text-sm text-slate-300">
+                Please contact reception for help.
+              </p>
+            )}
           </div>
-        </div>
-
-        <div className="w-full max-w-md pb-8 relative z-10">
-          <Button
-            className="w-full text-lg py-5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all active:scale-[0.98]"
-            onClick={handleStart}
-          >
-            {session ? "Continue Your Order" : "Start Ordering"}
-          </Button>
-        </div>
-      </div>
+        </section>
+      </main>
     </PageTransition>
   );
 }

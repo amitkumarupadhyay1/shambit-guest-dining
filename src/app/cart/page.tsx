@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { cartEntryKey } from "@/lib/orderPayload";
 import { useCartStore } from "@/stores/useCartStore";
 import { useSessionStore } from "@/stores/useSessionStore";
 import { PageTransition } from "@/components/shared/PageTransition";
@@ -18,7 +19,7 @@ import { motion, AnimatePresence } from "framer-motion";
 export default function CartPage() {
   const router = useRouter();
   const { items, updateQuantity, removeItem, getTotalPrice } = useCartStore();
-  const { restaurant, table } = useSessionStore();
+  const { restaurant, table, contextType } = useSessionStore();
 
   if (items.length === 0) {
     return (
@@ -56,7 +57,7 @@ export default function CartPage() {
             <h1 className="font-bold text-slate-900">Your Order</h1>
             <p className="text-xs text-slate-500">
               {restaurant?.name
-                ? `${restaurant.name} · Table ${table?.number}`
+                ? `${restaurant.name} · ${contextType === "ROOM_SERVICE" ? "Room" : "Table"} ${table?.number}`
                 : `${items.length} ${items.length === 1 ? "item" : "items"}`}
             </p>
           </div>
@@ -66,7 +67,7 @@ export default function CartPage() {
           <AnimatePresence mode="popLayout">
             {items.map((item) => (
               <motion.div
-                key={item.menuItemId}
+                key={cartEntryKey(item)}
                 layout
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -110,7 +111,7 @@ export default function CartPage() {
                     )}
                   </div>
                   <button
-                    onClick={() => removeItem(item.menuItemId)}
+                    onClick={() => removeItem(cartEntryKey(item))}
                     className="w-10 h-10 flex-shrink-0 grid place-items-center rounded-full bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -126,7 +127,7 @@ export default function CartPage() {
                     <button
                       className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-700 hover:bg-slate-50 transition-colors"
                       onClick={() =>
-                        updateQuantity(item.menuItemId, item.quantity - 1)
+                        updateQuantity(cartEntryKey(item), item.quantity - 1)
                       }
                     >
                       <Minus className="w-4 h-4" />
@@ -137,7 +138,7 @@ export default function CartPage() {
                     <button
                       className="w-8 h-8 rounded-full bg-emerald-500 shadow-sm flex items-center justify-center text-white hover:bg-emerald-600 transition-colors"
                       onClick={() =>
-                        updateQuantity(item.menuItemId, item.quantity + 1)
+                        updateQuantity(cartEntryKey(item), item.quantity + 1)
                       }
                     >
                       <Plus className="w-4 h-4" />

@@ -1,7 +1,7 @@
 {
   "name": "ShamBit Dine",
   "short_name": "ShamBit Dine",
-  "description": "Order from your table instantly",
+  "description": "Guest dining for your room or table",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

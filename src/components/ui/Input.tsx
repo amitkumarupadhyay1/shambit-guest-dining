@@ -1,5 +1,5 @@
 "use client";
-import { useState, forwardRef } from "react";
+import { useState, useId, forwardRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -9,13 +9,20 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, className, value, onFocus, onBlur, ...props }, ref) => {
+  ({ label, error, className, value, onFocus, onBlur, id, ...props }, ref) => {
+    const generatedId = useId();
+    const inputId = id ?? generatedId;
     const [focused, setFocused] = useState(false);
     const hasValue = value !== undefined && value !== "";
     return (
       <div className="relative">
         <input
           ref={ref}
+          id={inputId}
+          aria-invalid={!!error}
+          aria-describedby={
+            error ? `${inputId}-error` : props["aria-describedby"]
+          }
           value={value}
           onFocus={(e) => {
             setFocused(true);
@@ -26,7 +33,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             onBlur?.(e);
           }}
           className={cn(
-            "w-full px-4 pt-6 pb-2 text-base bg-white border-2 rounded-2xl outline-none transition-all peer",
+            "w-full min-w-0 px-4 pt-6 pb-2 text-base text-slate-900 bg-white border-2 rounded-2xl outline-none transition-all peer",
             focused
               ? "border-emerald-500 ring-4 ring-emerald-500/10"
               : "border-slate-200",
@@ -37,6 +44,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           {...props}
         />
         <motion.label
+          htmlFor={inputId}
           animate={{
             y: focused || hasValue ? -8 : 0,
             scale: focused || hasValue ? 0.85 : 1,
@@ -51,6 +59,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <AnimatePresence>
           {error && (
             <motion.p
+              id={`${inputId}-error`}
+              role="alert"
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}

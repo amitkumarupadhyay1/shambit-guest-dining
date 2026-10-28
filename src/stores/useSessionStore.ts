@@ -1,3 +1,4 @@
+import { useCartStore } from "./useCartStore";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
@@ -6,6 +7,7 @@ import type {
   Session,
   MenuItem,
   Category,
+  ScanResponse,
 } from "@/types";
 
 interface SessionState {
@@ -17,16 +19,10 @@ interface SessionState {
   categories: Category[];
   orderingEnabled: boolean;
   canStartSession: boolean;
-  setFromScan: (data: {
-    guest_token: string;
-    restaurant: Restaurant;
-    table: TableInfo;
-    session: Session | null;
-    menu_items: MenuItem[];
-    categories: Category[];
-    ordering_enabled: boolean;
-    can_start_session: boolean;
-  }) => void;
+  contextType: "DINE_IN" | "ROOM_SERVICE";
+  serviceAvailable: boolean;
+  scanCode: string | null;
+  setFromScan: (data: ScanResponse, code?: string) => void;
   updateSession: (session: Session | null) => void;
   updateToken: (token: string) => void;
   reset: () => void;
@@ -34,7 +30,10 @@ interface SessionState {
 
 export const useSessionStore = create<SessionState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
+      contextType: "DINE_IN",
+      serviceAvailable: true,
+      scanCode: null,
       guestToken: null,
       restaurant: null,
       table: null,
@@ -43,8 +42,21 @@ export const useSessionStore = create<SessionState>()(
       categories: [],
       orderingEnabled: false,
       canStartSession: false,
-      setFromScan: (data) => {
+      setFromScan: (data, code) => {
+        const previous = get();
+        if (
+          previous.restaurant?.id !== data.restaurant.id ||
+          previous.table?.id !== data.table.id ||
+          previous.contextType !== (data.context_type ?? "DINE_IN") ||
+          previous.session?.id !== data.session?.id
+        )
+          useCartStore.getState().clearCart();
+        if (typeof window !== "undefined")
+          localStorage.setItem("guest_token", data.guest_token);
         set({
+          contextType: data.context_type ?? "DINE_IN",
+          serviceAvailable: data.service_available ?? true,
+          scanCode: code ?? previous.scanCode,
           guestToken: data.guest_token,
           restaurant: data.restaurant,
           table: data.table,
@@ -55,7 +67,12 @@ export const useSessionStore = create<SessionState>()(
           canStartSession: data.can_start_session,
         });
       },
-      updateSession: (session) => set({ session }),
+      updateSession: (session) =>
+        set({
+          session,
+          orderingEnabled: session?.status === "OPEN",
+          canStartSession: false,
+        }),
       updateToken: (token) => {
         if (typeof window !== "undefined") {
           localStorage.setItem("guest_token", token);
@@ -68,6 +85,9 @@ export const useSessionStore = create<SessionState>()(
         }
         set({
           guestToken: null,
+          contextType: "DINE_IN",
+          serviceAvailable: true,
+          scanCode: null,
           restaurant: null,
           table: null,
           session: null,

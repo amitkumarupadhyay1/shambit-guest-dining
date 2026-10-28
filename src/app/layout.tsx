@@ -6,8 +6,9 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "ShamBit Dine — Order from your table",
-  description: "Scan, browse, order. Your table, your way.",
+  title: "ShamBit Dine — Room & table service",
+  description:
+    "Scan your room or table code, explore the menu, and order with ease.",
   manifest: "/manifest.json",
   icons: {
     icon: "/logo.png",

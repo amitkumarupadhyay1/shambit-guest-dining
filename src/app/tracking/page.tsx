@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getErrorMessage } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useSessionStore } from "@/stores/useSessionStore";
 import { PageTransition } from "@/components/shared/PageTransition";
@@ -25,7 +26,16 @@ const PIPELINE = [
 
 export default function TrackingPage() {
   const router = useRouter();
-  const { session, updateSession, guestToken, menuItems } = useSessionStore();
+  const {
+    session,
+    updateSession,
+    guestToken,
+    menuItems,
+    contextType,
+    scanCode,
+  } = useSessionStore();
+  const [error, setError] = useState("");
+  const [requestingBill, setRequestingBill] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(true);
 
@@ -34,8 +44,11 @@ export default function TrackingPage() {
       try {
         const res = await api.getSessionStatus();
         updateSession(res.session);
+        setError("");
       } catch (err) {
-        console.error(err);
+        setError(
+          getErrorMessage(err, "Could not refresh your order. Please retry."),
+        );
       } finally {
         setLoadingStatus(false);
       }
@@ -50,18 +63,29 @@ export default function TrackingPage() {
     try {
       const res = await api.getSessionStatus();
       updateSession(res.session);
+      setError("");
+    } catch (failure) {
+      setError(getErrorMessage(failure, "Could not refresh. Please retry."));
     } finally {
       setTimeout(() => setRefreshing(false), 500);
     }
   };
 
   const handleRequestBill = async () => {
-    if (!guestToken) return;
+    if (!guestToken || requestingBill) return;
+    setRequestingBill(true);
     try {
-      await api.requestBill(guestToken);
+      await api.requestBill(
+        guestToken,
+        contextType === "ROOM_SERVICE" ? "ROOM" : undefined,
+      );
       router.push("/bill");
-    } catch {
-      alert("Could not request bill");
+    } catch (failure) {
+      setError(
+        getErrorMessage(failure, "Could not request your bill. Please retry."),
+      );
+    } finally {
+      setRequestingBill(false);
     }
   };
 
@@ -81,7 +105,13 @@ export default function TrackingPage() {
         <div className="bg-white px-4 py-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => router.push("/menu")}
+              onClick={() =>
+                router.push(
+                  contextType === "ROOM_SERVICE" && session?.status !== "OPEN"
+                    ? "/welcome"
+                    : "/menu",
+                )
+              }
               className="p-2 -ml-2 text-slate-600 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -89,6 +119,7 @@ export default function TrackingPage() {
             <h1 className="text-xl font-bold text-slate-900">Live Tracking</h1>
           </div>
           <button
+            aria-label="Refresh order status"
             onClick={handleRefresh}
             className={`p-2 text-emerald-600 bg-emerald-50 rounded-full ${refreshing ? "animate-spin" : ""}`}
           >
@@ -97,6 +128,22 @@ export default function TrackingPage() {
         </div>
 
         <div className="p-4 flex-1">
+          {error && (
+            <div
+              role="alert"
+              className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+            >
+              <p>{error}</p>
+              {scanCode && (
+                <button
+                  className="mt-2 font-semibold underline"
+                  onClick={() => router.push(`/scan/${scanCode}`)}
+                >
+                  Reopen room / table code
+                </button>
+              )}
+            </div>
+          )}
           {loadingStatus ? (
             <div className="text-center py-16 px-6 bg-white rounded-3xl shadow-sm border border-slate-100">
               <Clock className="w-10 h-10 text-emerald-600 animate-pulse mx-auto mb-4" />
@@ -119,7 +166,16 @@ export default function TrackingPage() {
                 Looks like you haven&apos;t ordered anything yet, or all your
                 orders are completed.
               </p>
-              <Button onClick={() => router.push("/menu")} className="w-full">
+              <Button
+                onClick={() =>
+                  router.push(
+                    contextType === "ROOM_SERVICE" && session?.status !== "OPEN"
+                      ? "/welcome"
+                      : "/menu",
+                  )
+                }
+                className="w-full"
+              >
                 Explore Menu
               </Button>
             </div>
@@ -209,7 +265,10 @@ export default function TrackingPage() {
                                 {item.quantity}x
                               </div>
                               <span className="font-medium text-slate-800 text-sm">
-                                {getItemName(item.menu_item)}
+                                {item.name || getItemName(item.menu_item)}
+                                {item.variant_name
+                                  ? ` · ${item.variant_name}`
+                                  : ""}
                               </span>
                             </div>
                             <span className="text-xs font-bold text-slate-400 mt-0.5">
@@ -231,15 +290,29 @@ export default function TrackingPage() {
           <Button
             variant="secondary"
             className="flex-1 py-4 text-base font-bold bg-slate-100 text-slate-700 hover:bg-slate-200"
-            onClick={() => router.push("/menu")}
+            onClick={() =>
+              router.push(
+                contextType === "ROOM_SERVICE" && session?.status !== "OPEN"
+                  ? "/welcome"
+                  : "/menu",
+              )
+            }
           >
             Order More
           </Button>
           <Button
             className="flex-1 py-4 text-base font-bold bg-slate-900 text-white hover:bg-slate-800 shadow-xl shadow-slate-900/20"
             onClick={handleRequestBill}
+            loading={requestingBill}
+            disabled={
+              requestingBill ||
+              !session ||
+              ["CLOSED", "PAID", "CANCELLED"].includes(session.status)
+            }
           >
-            Request Bill
+            {contextType === "ROOM_SERVICE"
+              ? "Request room bill"
+              : "Request bill"}
           </Button>
         </div>
       </div>
